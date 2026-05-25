@@ -1,25 +1,64 @@
 const Tarea = require("../models/tarea");
 
+function crearLinksTarea(id) {
+  return {
+    self: `/api/tareas/${id}`,
+    update: `/api/tareas/${id}`,
+    delete: `/api/tareas/${id}`,
+  };
+}
+
+function crearMetadata(status) {
+  return {
+    status: status,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function responderError(res, status, mensaje) {
+  return res.status(status).json({
+    ok: false,
+    mensaje: mensaje,
+    metadata: crearMetadata(status),
+  });
+}
+
 /*
 VERSION CHATGPT:
-Esta version usa destructuring, return temprano,
-respuestas con ok, data y mejor manejo de errores.
+Esta version lista las tareas ordenadas por fecha, devuelve una
+estructura REST mas completa, agrega metadatos, enlaces y evita
+devolver campos internos como __v.
 
 async function listarTareas(req, res) {
   try {
-    const tareas = await Tarea.find().sort({ fecha: 1 });
+    const tareas = await Tarea.find()
+      .select("descripcion fecha completada")
+      .sort({ fecha: 1 });
 
-    return res.json({
+    const data = tareas.map((tarea) => ({
+      id: tarea._id,
+      descripcion: tarea.descripcion,
+      fecha: tarea.fecha,
+      completada: tarea.completada,
+      links: crearLinksTarea(tarea._id),
+    }));
+
+    return res.status(200).json({
       ok: true,
-      total: tareas.length,
-      data: tareas,
+      mensaje: "Lista de tareas obtenida correctamente",
+      metadata: {
+        status: 200,
+        total: data.length,
+        timestamp: new Date().toISOString(),
+      },
+      data: data,
+      links: {
+        self: "/api/tareas",
+        create: "/api/tareas",
+      },
     });
   } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      mensaje: "Error al listar las tareas",
-      error: error.message,
-    });
+    return responderError(res, 500, "Error al listar las tareas");
   }
 }
 */
@@ -27,30 +66,48 @@ async function listarTareas(req, res) {
 // Version adaptada
 async function listarTareas(req, res) {
   try {
-    const tareas = await Tarea.find();
+    const tareas = await Tarea.find().select("descripcion fecha completada");
 
-    res.json(tareas);
-  } catch (error) {
-    res.status(500).json({
-      mensaje: "Error al listar las tareas",
+    const data = tareas.map((tarea) => {
+      return {
+        id: tarea._id,
+        descripcion: tarea.descripcion,
+        fecha: tarea.fecha,
+        completada: tarea.completada,
+        links: crearLinksTarea(tarea._id),
+      };
     });
+
+    res.status(200).json({
+      ok: true,
+      mensaje: "Lista de tareas obtenida",
+      metadata: {
+        status: 200,
+        total: data.length,
+        timestamp: new Date().toISOString(),
+      },
+      data: data,
+      links: {
+        self: "/api/tareas",
+        create: "/api/tareas",
+      },
+    });
+  } catch (error) {
+    responderError(res, 500, "Error al listar las tareas");
   }
 }
 
 /*
 VERSION CHATGPT:
-Esta version valida mejor los campos y devuelve una respuesta
-mas ordenada con codigo HTTP 201 cuando crea correctamente.
+Esta version usa destructuring, Tarea.create(), return temprano
+y devuelve una respuesta REST completa con metadata, data y links.
 
 async function crearTarea(req, res) {
   try {
     const { descripcion, fecha } = req.body;
 
     if (!descripcion || !fecha) {
-      return res.status(400).json({
-        ok: false,
-        mensaje: "La descripcion y la fecha son obligatorias",
-      });
+      return responderError(res, 400, "La descripcion y la fecha son obligatorias");
     }
 
     const tarea = await Tarea.create({
@@ -62,14 +119,17 @@ async function crearTarea(req, res) {
     return res.status(201).json({
       ok: true,
       mensaje: "Tarea creada correctamente",
-      data: tarea,
+      metadata: crearMetadata(201),
+      data: {
+        id: tarea._id,
+        descripcion: tarea.descripcion,
+        fecha: tarea.fecha,
+        completada: tarea.completada,
+      },
+      links: crearLinksTarea(tarea._id),
     });
   } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      mensaje: "Error al crear la tarea",
-      error: error.message,
-    });
+    return responderError(res, 500, "Error al crear la tarea");
   }
 }
 */
@@ -81,9 +141,7 @@ async function crearTarea(req, res) {
     const fecha = req.body.fecha;
 
     if (!descripcion || !fecha) {
-      res.status(400).json({
-        mensaje: "Debe llenar descripcion y fecha",
-      });
+      responderError(res, 400, "Debe llenar descripcion y fecha");
       return;
     }
 
@@ -96,42 +154,51 @@ async function crearTarea(req, res) {
     await tarea.save();
 
     res.status(201).json({
+      ok: true,
       mensaje: "Tarea creada",
-      tarea: tarea,
+      metadata: crearMetadata(201),
+      data: {
+        id: tarea._id,
+        descripcion: tarea.descripcion,
+        fecha: tarea.fecha,
+        completada: tarea.completada,
+      },
+      links: crearLinksTarea(tarea._id),
     });
   } catch (error) {
-    res.status(500).json({
-      mensaje: "Error al crear la tarea",
-    });
+    responderError(res, 500, "Error al crear la tarea");
   }
 }
 
 /*
 VERSION CHATGPT:
-Esta version busca por ID y diferencia entre error de ID invalido
-y tarea no encontrada.
+Esta version busca una tarea por ID, devuelve data con links
+para ver, actualizar o eliminar el recurso, y diferencia 404 de 400.
 
 async function obtenerTarea(req, res) {
   try {
-    const tarea = await Tarea.findById(req.params.id);
+    const tarea = await Tarea.findById(req.params.id).select(
+      "descripcion fecha completada"
+    );
 
     if (!tarea) {
-      return res.status(404).json({
-        ok: false,
-        mensaje: "Tarea no encontrada",
-      });
+      return responderError(res, 404, "Tarea no encontrada");
     }
 
-    return res.json({
+    return res.status(200).json({
       ok: true,
-      data: tarea,
+      mensaje: "Tarea obtenida correctamente",
+      metadata: crearMetadata(200),
+      data: {
+        id: tarea._id,
+        descripcion: tarea.descripcion,
+        fecha: tarea.fecha,
+        completada: tarea.completada,
+      },
+      links: crearLinksTarea(tarea._id),
     });
   } catch (error) {
-    return res.status(400).json({
-      ok: false,
-      mensaje: "ID invalido",
-      error: error.message,
-    });
+    return responderError(res, 400, "ID invalido");
   }
 }
 */
@@ -139,27 +206,37 @@ async function obtenerTarea(req, res) {
 // Version adaptada
 async function obtenerTarea(req, res) {
   try {
-    const tarea = await Tarea.findById(req.params.id);
+    const tarea = await Tarea.findById(req.params.id).select(
+      "descripcion fecha completada",
+    );
 
     if (!tarea) {
-      res.status(404).json({
-        mensaje: "Tarea no encontrada",
-      });
+      responderError(res, 404, "Tarea no encontrada");
       return;
     }
 
-    res.json(tarea);
-  } catch (error) {
-    res.status(400).json({
-      mensaje: "ID invalido",
+    res.status(200).json({
+      ok: true,
+      mensaje: "Tarea obtenida",
+      metadata: crearMetadata(200),
+      data: {
+        id: tarea._id,
+        descripcion: tarea.descripcion,
+        fecha: tarea.fecha,
+        completada: tarea.completada,
+      },
+      links: crearLinksTarea(tarea._id),
     });
+  } catch (error) {
+    responderError(res, 400, "ID invalido");
   }
 }
 
 /*
 VERSION CHATGPT:
-Esta version permite actualizar solo algunos campos,
-usa runValidators para respetar el modelo y devuelve la tarea nueva.
+Esta version actualiza directamente con findByIdAndUpdate(),
+usa runValidators para respetar el modelo, new:true para devolver
+la tarea ya actualizada, y responde con metadata y links.
 
 async function actualizarTarea(req, res) {
   try {
@@ -170,26 +247,26 @@ async function actualizarTarea(req, res) {
         new: true,
         runValidators: true,
       }
-    );
+    ).select("descripcion fecha completada");
 
     if (!tarea) {
-      return res.status(404).json({
-        ok: false,
-        mensaje: "Tarea no encontrada",
-      });
+      return responderError(res, 404, "Tarea no encontrada");
     }
 
-    return res.json({
+    return res.status(200).json({
       ok: true,
       mensaje: "Tarea actualizada correctamente",
-      data: tarea,
+      metadata: crearMetadata(200),
+      data: {
+        id: tarea._id,
+        descripcion: tarea.descripcion,
+        fecha: tarea.fecha,
+        completada: tarea.completada,
+      },
+      links: crearLinksTarea(tarea._id),
     });
   } catch (error) {
-    return res.status(400).json({
-      ok: false,
-      mensaje: "Error al actualizar la tarea",
-      error: error.message,
-    });
+    return responderError(res, 400, "Error al actualizar la tarea");
   }
 }
 */
@@ -200,9 +277,7 @@ async function actualizarTarea(req, res) {
     const tarea = await Tarea.findById(req.params.id);
 
     if (!tarea) {
-      res.status(404).json({
-        mensaje: "Tarea no encontrada",
-      });
+      responderError(res, 404, "Tarea no encontrada");
       return;
     }
 
@@ -220,44 +295,54 @@ async function actualizarTarea(req, res) {
 
     await tarea.save();
 
-    res.json({
+    res.status(200).json({
+      ok: true,
       mensaje: "Tarea actualizada",
-      tarea: tarea,
+      metadata: crearMetadata(200),
+      data: {
+        id: tarea._id,
+        descripcion: tarea.descripcion,
+        fecha: tarea.fecha,
+        completada: tarea.completada,
+      },
+      links: crearLinksTarea(tarea._id),
     });
   } catch (error) {
-    res.status(400).json({
-      mensaje: "Error al actualizar la tarea",
-    });
+    responderError(res, 400, "Error al actualizar la tarea");
   }
 }
 
 /*
 VERSION CHATGPT:
-Esta version elimina directamente con findByIdAndDelete
-y responde 404 si no existe.
+Esta version elimina con findByIdAndDelete(), hace la operacion
+en una sola llamada a MongoDB y devuelve enlaces para listar o crear
+otra tarea.
 
 async function eliminarTarea(req, res) {
   try {
-    const tarea = await Tarea.findByIdAndDelete(req.params.id);
+    const tarea = await Tarea.findByIdAndDelete(req.params.id).select(
+      "descripcion fecha completada"
+    );
 
     if (!tarea) {
-      return res.status(404).json({
-        ok: false,
-        mensaje: "Tarea no encontrada",
-      });
+      return responderError(res, 404, "Tarea no encontrada");
     }
 
-    return res.json({
+    return res.status(200).json({
       ok: true,
       mensaje: "Tarea eliminada correctamente",
-      data: tarea,
+      metadata: crearMetadata(200),
+      data: {
+        id: tarea._id,
+        descripcion: tarea.descripcion,
+      },
+      links: {
+        list: "/api/tareas",
+        create: "/api/tareas",
+      },
     });
   } catch (error) {
-    return res.status(400).json({
-      ok: false,
-      mensaje: "Error al eliminar la tarea",
-      error: error.message,
-    });
+    return responderError(res, 400, "Error al eliminar la tarea");
   }
 }
 */
@@ -268,21 +353,27 @@ async function eliminarTarea(req, res) {
     const tarea = await Tarea.findById(req.params.id);
 
     if (!tarea) {
-      res.status(404).json({
-        mensaje: "Tarea no encontrada",
-      });
+      responderError(res, 404, "Tarea no encontrada");
       return;
     }
 
     await tarea.deleteOne();
 
-    res.json({
+    res.status(200).json({
+      ok: true,
       mensaje: "Tarea eliminada",
+      metadata: crearMetadata(200),
+      data: {
+        id: tarea._id,
+        descripcion: tarea.descripcion,
+      },
+      links: {
+        list: "/api/tareas",
+        create: "/api/tareas",
+      },
     });
   } catch (error) {
-    res.status(400).json({
-      mensaje: "Error al eliminar la tarea",
-    });
+    responderError(res, 400, "Error al eliminar la tarea");
   }
 }
 
