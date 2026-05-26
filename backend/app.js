@@ -3,6 +3,7 @@ require("dotenv").config();
 const dns = require("dns");
 const express = require("express");
 const mongoose = require("mongoose");
+const cors = require("cors");
 const tareasRouter = require("./routes/tareas");
 
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
@@ -10,6 +11,7 @@ dns.setServers(["8.8.8.8", "1.1.1.1"]);
 const app = express();
 const puerto = process.env.PORT || 3000;
 
+app.use(cors());
 app.use(express.json());
 app.use("/api/tareas", tareasRouter);
 
