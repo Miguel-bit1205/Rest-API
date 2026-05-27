@@ -13,7 +13,13 @@ div {
 
 h1 {
   color: black;
-  font-size: 22px;
+  font-size: 20px;
+  text-align: center;
+}
+
+h2 {
+  color: black;
+  font-size: 20px;
   text-align: center;
 }
 

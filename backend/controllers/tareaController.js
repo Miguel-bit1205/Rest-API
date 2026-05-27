@@ -1,20 +1,18 @@
 const Tarea = require("../models/tarea");
-
 function crearLinksTarea(id) {
   return {
     self: `/api/tareas/${id}`,
     update: `/api/tareas/${id}`,
     delete: `/api/tareas/${id}`,
+    archivos: `/api/tareas/${id}/archivos`,
   };
 }
-
 function crearMetadata(status) {
   return {
     status: status,
     timestamp: new Date().toISOString(),
   };
 }
-
 function responderError(res, status, mensaje) {
   return res.status(status).json({
     ok: false,
@@ -377,10 +375,337 @@ async function eliminarTarea(req, res) {
   }
 }
 
+/*
+VERSION CHATGPT:
+Esta version sube un archivo asociado a una tarea. Valida que la tarea
+exista, verifica que se haya enviado un archivo, guarda la informacion
+del archivo en MongoDB y devuelve una respuesta REST con metadata,
+data y links.
+
+async function subirArchivo(req, res) {
+  try {
+    const tarea = await Tarea.findById(req.params.id);
+
+    if (!tarea) {
+      return responderError(res, 404, "Tarea no encontrada");
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return responderError(res, 400, "No se envio ningun archivo");
+    }
+
+    const archivoSubido = req.files[0];
+
+    const archivo = {
+      nombreOriginal: archivoSubido.originalname,
+      nombreGuardado: archivoSubido.filename,
+      tipo: archivoSubido.mimetype,
+      tamano: archivoSubido.size,
+      ruta: archivoSubido.path,
+    };
+
+    tarea.archivos.push(archivo);
+
+    await tarea.save();
+
+    const archivoGuardado = tarea.archivos[tarea.archivos.length - 1];
+
+    return res.status(201).json({
+      ok: true,
+      mensaje: "Archivo subido correctamente",
+      metadata: crearMetadata(201),
+      data: archivoGuardado,
+      links: {
+        tarea: `/api/tareas/${tarea._id}`,
+        archivos: `/api/tareas/${tarea._id}/archivos`,
+        download: `/api/tareas/${tarea._id}/archivos/${archivoGuardado._id}/download`,
+      },
+    });
+  } catch (error) {
+    return responderError(res, 500, "Error al subir archivo");
+  }
+}
+*/
+
+// Version adaptada
+async function subirArchivo(req, res) {
+  try {
+    const tarea = await Tarea.findById(req.params.id);
+
+    if (!tarea) {
+      responderError(res, 404, "Tarea no encontrada");
+      return;
+    }
+
+    if (!req.files || req.files.length === 0) {
+      responderError(res, 400, "No se envio ningun archivo");
+      return;
+    }
+
+    const archivoSubido = req.files[0];
+
+    const archivo = {
+      nombreOriginal: archivoSubido.originalname,
+      nombreGuardado: archivoSubido.filename,
+      tipo: archivoSubido.mimetype,
+      tamano: archivoSubido.size,
+      ruta: archivoSubido.path,
+    };
+
+    tarea.archivos.push(archivo);
+
+    await tarea.save();
+
+    res.status(201).json({
+      ok: true,
+      mensaje: "Archivo subido correctamente",
+      metadata: {
+        status: 201,
+        timestamp: new Date().toISOString(),
+      },
+      data: tarea.archivos[tarea.archivos.length - 1],
+      links: {
+        tarea: "/api/tareas/" + tarea._id,
+        archivos: "/api/tareas/" + tarea._id + "/archivos",
+      },
+    });
+  } catch (error) {
+    responderError(res, 500, "Error al subir archivo");
+  }
+}
+
+/*
+VERSION CHATGPT:
+Esta version lista los archivos de una tarea especifica. Busca solo
+el campo archivos para ahorrar datos y devuelve una lista con links
+para descargar o eliminar cada archivo.
+
+async function listarArchivos(req, res) {
+  try {
+    const tarea = await Tarea.findById(req.params.id).select("archivos");
+
+    if (!tarea) {
+      return responderError(res, 404, "Tarea no encontrada");
+    }
+
+    const archivos = tarea.archivos.map((archivo) => ({
+      id: archivo._id,
+      nombreOriginal: archivo.nombreOriginal,
+      tipo: archivo.tipo,
+      tamano: archivo.tamano,
+      links: {
+        download: `/api/tareas/${req.params.id}/archivos/${archivo._id}/download`,
+        delete: `/api/tareas/${req.params.id}/archivos/${archivo._id}`,
+      },
+    }));
+
+    return res.status(200).json({
+      ok: true,
+      mensaje: "Archivos de la tarea obtenidos correctamente",
+      metadata: {
+        status: 200,
+        total: archivos.length,
+        timestamp: new Date().toISOString(),
+      },
+      data: archivos,
+    });
+  } catch (error) {
+    return responderError(res, 400, "Error al listar archivos");
+  }
+}
+*/
+
+// Version adaptada
+async function listarArchivos(req, res) {
+  try {
+    const tarea = await Tarea.findById(req.params.id).select("archivos");
+
+    if (!tarea) {
+      responderError(res, 404, "Tarea no encontrada");
+      return;
+    }
+
+    const archivos = tarea.archivos.map((archivo) => {
+      return {
+        id: archivo._id,
+        nombreOriginal: archivo.nombreOriginal,
+        tipo: archivo.tipo,
+        tamano: archivo.tamano,
+        links: {
+          download:
+            "/api/tareas/" +
+            req.params.id +
+            "/archivos/" +
+            archivo._id +
+            "/download",
+          delete: "/api/tareas/" + req.params.id + "/archivos/" + archivo._id,
+        },
+      };
+    });
+
+    res.status(200).json({
+      ok: true,
+      mensaje: "Archivos de la tarea obtenidos",
+      metadata: {
+        status: 200,
+        total: archivos.length,
+        timestamp: new Date().toISOString(),
+      },
+      data: archivos,
+    });
+  } catch (error) {
+    responderError(res, 400, "Error al listar archivos");
+  }
+}
+
+/*
+VERSION CHATGPT:
+Esta version descarga un archivo asociado a una tarea. Primero valida
+que exista la tarea, luego busca el archivo dentro del arreglo de
+archivos y finalmente usa res.download() para enviarlo al navegador.
+
+async function descargarArchivo(req, res) {
+  try {
+    const tarea = await Tarea.findById(req.params.id);
+
+    if (!tarea) {
+      return responderError(res, 404, "Tarea no encontrada");
+    }
+
+    const archivo = tarea.archivos.id(req.params.archivoId);
+
+    if (!archivo) {
+      return responderError(res, 404, "Archivo no encontrado");
+    }
+
+    return res.download(archivo.ruta, archivo.nombreOriginal);
+  } catch (error) {
+    return responderError(res, 400, "Error al descargar archivo");
+  }
+}
+*/
+
+// Version adaptada
+async function descargarArchivo(req, res) {
+  try {
+    const tarea = await Tarea.findById(req.params.id);
+
+    if (!tarea) {
+      responderError(res, 404, "Tarea no encontrada");
+      return;
+    }
+
+    const archivo = tarea.archivos.id(req.params.archivoId);
+
+    if (!archivo) {
+      responderError(res, 404, "Archivo no encontrado");
+      return;
+    }
+
+    res.download(archivo.ruta, archivo.nombreOriginal);
+  } catch (error) {
+    responderError(res, 400, "Error al descargar archivo");
+  }
+}
+
+/*
+VERSION CHATGPT:
+Esta version elimina un archivo de una tarea. Primero valida que exista
+la tarea y el archivo. Luego elimina el archivo fisico de la carpeta
+uploads usando fs, elimina la metadata del archivo en MongoDB y guarda
+los cambios en la tarea.
+
+async function eliminarArchivo(req, res) {
+  try {
+    const fs = require("fs");
+
+    const tarea = await Tarea.findById(req.params.id);
+
+    if (!tarea) {
+      return responderError(res, 404, "Tarea no encontrada");
+    }
+
+    const archivo = tarea.archivos.id(req.params.archivoId);
+
+    if (!archivo) {
+      return responderError(res, 404, "Archivo no encontrado");
+    }
+
+    if (fs.existsSync(archivo.ruta)) {
+      fs.unlinkSync(archivo.ruta);
+    }
+
+    tarea.archivos.pull(req.params.archivoId);
+
+    await tarea.save();
+
+    return res.status(200).json({
+      ok: true,
+      mensaje: "Archivo eliminado correctamente",
+      metadata: crearMetadata(200),
+      links: {
+        tarea: `/api/tareas/${tarea._id}`,
+        archivos: `/api/tareas/${tarea._id}/archivos`,
+      },
+    });
+  } catch (error) {
+    return responderError(res, 400, "Error al eliminar archivo");
+  }
+}
+*/
+
+// Version adaptada
+async function eliminarArchivo(req, res) {
+  try {
+    const fs = require("fs");
+
+    const tarea = await Tarea.findById(req.params.id);
+
+    if (!tarea) {
+      responderError(res, 404, "Tarea no encontrada");
+      return;
+    }
+
+    const archivo = tarea.archivos.id(req.params.archivoId);
+
+    if (!archivo) {
+      responderError(res, 404, "Archivo no encontrado");
+      return;
+    }
+
+    if (fs.existsSync(archivo.ruta)) {
+      fs.unlinkSync(archivo.ruta);
+    }
+
+    tarea.archivos.pull(req.params.archivoId);
+
+    await tarea.save();
+
+    res.status(200).json({
+      ok: true,
+      mensaje: "Archivo eliminado correctamente",
+      metadata: {
+        status: 200,
+        timestamp: new Date().toISOString(),
+      },
+      links: {
+        tarea: "/api/tareas/" + tarea._id,
+        archivos: "/api/tareas/" + tarea._id + "/archivos",
+      },
+    });
+  } catch (error) {
+    responderError(res, 400, "Error al eliminar archivo");
+  }
+}
+
 module.exports = {
   listarTareas,
   crearTarea,
   obtenerTarea,
   actualizarTarea,
   eliminarTarea,
+  subirArchivo,
+  listarArchivos,
+  descargarArchivo,
+  eliminarArchivo,
 };
