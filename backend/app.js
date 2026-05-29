@@ -5,6 +5,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const tareasRouter = require("./routes/tareas");
+const authRouter = require("./routes/auth");
 
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
@@ -14,6 +15,7 @@ const puerto = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use("/api/tareas", tareasRouter);
+app.use("/api/auth", authRouter);
 
 async function conectarMongoDB() {
   try {
